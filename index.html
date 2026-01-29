@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Safe Meme Coin Tool - Pump.fun + DexScreener Only</title>
+  <title>Safe Meme Coin Tool - DexScreener Solana Focus</title>
   <style>
     body { font-family: Arial, sans-serif; background: #0a0a0a; color: #ddd; margin: 20px; }
     h1 { text-align: center; color: #00ff00; }
@@ -11,7 +11,6 @@
     th, td { border: 1px solid #333; padding: 10px; text-align: center; }
     th { background: #222; }
     .entry { background: #004400; }
-    .exit { background: #440044; }
     .alert { background: #440000; }
     .link, button { color: #0ff; background: none; border: 1px solid #0ff; padding: 5px 10px; cursor: pointer; text-decoration: none; }
     button:hover { background: #0ff; color: #000; }
@@ -22,9 +21,9 @@
   </style>
 </head>
 <body>
-  <h1>Safe Meme Coin Dashboard (Pump.fun Recent + DexScreener Data)</h1>
-  <p style="text-align:center;">Recent Pump.fun launches, only showing **migrated** (Raydium LP) for safety. m5 data from DexScreener. Alerts + sound on entry/exit/risk.<br>
-  Min liquidity $5k filter. DYOR — crypto high risk! No whale txns (limited APIs).</p>
+  <h1>Safe Solana Meme Dashboard (DexScreener Only – Pump.fun Migrated Proxy)</h1>
+  <p style="text-align:center;">Shows recent/hot Solana Raydium pairs (many from Pump.fun migrations). Safety: Liq ≥ $5k. Alerts on entry/exit/rug risk. Pump.fun direct links added (view bonding curve if pre-migration).<br>
+  No broken APIs. Refresh often. DYOR – high risk!</p>
 
   <div id="controls">
     <button onclick="loadData()">Refresh Now</button>
@@ -45,8 +44,8 @@
         <th>m5 Buys/Sells</th>
         <th>m5 Volume USD</th>
         <th>m5 % Change</th>
-        <th>Age (min approx)</th>
-        <th>Alerts (Safe Entry/Exit/Rug)</th>
+        <th>Pair Age (min)</th>
+        <th>Alerts</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -54,8 +53,7 @@
   </table>
 
   <script>
-    const PUMP_RECENT_URL = 'https://api.pump.fun/coins?offset=0&limit=30&sort=created_timestamp&order=desc';
-    const DEX_TOKENS_URL = 'https://api.dexscreener.com/latest/dex/tokens/';
+    const DEX_SEARCH_URL = 'https://api.dexscreener.com/latest/dex/search?q=solana raydium meme';
     const SOL_MINT = 'So11111111111111111111111111111111111111112';
     let walletAddress = null;
 
@@ -66,7 +64,7 @@
 
     async function fetchJson(url) {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
       return res.json();
     }
 
@@ -76,7 +74,6 @@
           const resp = await window.solana.connect();
           walletAddress = resp.publicKey.toString();
           WALLET_EL.textContent = `Wallet: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
-          alert('Phantom connected!');
         } catch (err) {
           alert('Connection failed: ' + err.message);
         }
@@ -98,65 +95,60 @@
     async function loadData() {
       try {
         ERROR_EL.textContent = '';
-        const pumpCoins = await fetchJson(PUMP_RECENT_URL);
-        const recentMints = pumpCoins.map(c => c.mint);
+        const searchRes = await fetchJson(DEX_SEARCH_URL);
+        const pairs = searchRes.pairs || [];
 
-        const dexPromises = recentMints.map(async (mint) => {
-          try {
-            const dexRes = await fetchJson(`${DEX_TOKENS_URL}${mint}`);
-            const pair = dexRes.pairs?.[0]; // main pair (highest liq)
-            if (!pair || pair.liquidity?.usd < 5000) return null; // Safety: skip no/low liq
-
-            const ageMin = Math.round((Date.now() - new Date(pumpCoins.find(c => c.mint === mint)?.created_timestamp || Date.now())) / 60000);
-            const m5 = pair.txns?.m5 || {};
+        const results = pairs
+          .filter(p => p.chainId === 'solana' && p.liquidity?.usd >= 5000) // Safety filter
+          .map(p => {
+            const ageMin = p.pairCreatedAt ? Math.round((Date.now() - p.pairCreatedAt) / 60000) : 'N/A';
+            const m5 = p.txns?.m5 || {};
             const buys = m5.buys || 0;
             const sells = m5.sells || 0;
-            const vol = pair.volume?.m5 || 0;
-            const change = pair.priceChange?.m5 || 0;
-            const liq = pair.liquidity?.usd || 0;
-            const fdv = pair.fdv || 0;
+            const vol = p.volume?.m5 || 0;
+            const change = p.priceChange?.m5 || 0;
+            const liq = p.liquidity?.usd || 0;
+            const fdv = p.fdv || 0;
 
             let alert = '';
-            if (sells > buys * 2 || change < -30 || liq / fdv < 0.1) alert = 'RUG RISK! High sells/drop/low liq.';
-            else if (buys > 20 && buys > sells * 1.5 && vol > 10000 && change > 10) alert = 'SAFE ENTRY? Volume surge + buys.';
-            else if (sells > buys * 1.5 && change < -10) alert = 'EXIT ALERT! Sell pressure.';
+            if (sells > buys * 2 || change < -25 || liq / fdv < 0.05) alert = 'RUG RISK! High sells / drop / low liq ratio.';
+            else if (buys > 15 && buys > sells && vol > 8000 && change > 8) alert = 'Potential SAFE ENTRY – buy volume surge.';
+            else if (sells > buys && change < -8) alert = 'EXIT ALERT – sell pressure.';
 
+            const mint = p.baseToken.address;
             const pumpLink = `https://pump.fun/${mint}`;
             const jupLink = `https://jup.ag/swap/${SOL_MINT}-${mint}`;
 
             return {
-              symbol: pair.baseToken.symbol,
-              price: pair.priceUsd ? Number(pair.priceUsd).toFixed(6) : 'N/A',
-              fdv: fdv ? fdv.toLocaleString() : 'N/A',
-              liq: liq ? liq.toLocaleString() : 'N/A',
+              symbol: p.baseToken.symbol,
+              price: p.priceUsd ? Number(p.priceUsd).toFixed(6) : 'N/A',
+              fdv: fdv.toLocaleString(),
+              liq: liq.toLocaleString(),
               m5BuysSells: `${buys}/${sells}`,
-              m5Vol: vol ? vol.toLocaleString() : 'N/A',
-              m5Change: change ? change.toFixed(2) + '%' : 'N/A',
+              m5Vol: vol.toLocaleString(),
+              m5Change: change.toFixed(2) + '%',
               age: ageMin,
               alert,
+              dsUrl: p.url,
               pumpLink,
-              dsUrl: pair.url || `https://dexscreener.com/solana/${mint}`,
               jupLink
             };
-          } catch (e) { return null; }
-        });
-
-        const results = (await Promise.all(dexPromises)).filter(Boolean);
-        // Sort: prioritize safe entries (high change + volume), then recent
-        results.sort((a, b) => {
-          const aScore = a.alert.includes('ENTRY') ? 4 : a.alert.includes('RISK') ? -2 : 0;
-          const bScore = b.alert.includes('ENTRY') ? 4 : b.alert.includes('RISK') ? -2 : 0;
-          return bScore - aScore || b.m5Change - a.m5Change || b.age - a.age;
-        });
+          })
+          .sort((a, b) => {
+            const aScore = a.alert.includes('ENTRY') ? 5 : a.alert.includes('RISK') ? -3 : 0;
+            const bScore = b.alert.includes('ENTRY') ? 5 : b.alert.includes('RISK') ? -3 : 0;
+            return bScore - aScore || parseFloat(b.m5Change) - parseFloat(a.m5Change) || b.m5Vol - a.m5Vol;
+          })
+          .slice(0, 15); // Limit to top 15 for performance
 
         TABLE.innerHTML = '';
         let hasAlert = false;
         results.forEach(r => {
           const row = document.createElement('tr');
-          let rowClass = '';
-          if (r.alert.includes('ENTRY')) { rowClass = 'entry'; hasAlert = true; }
-          if (r.alert.includes('EXIT') || r.alert.includes('RISK')) { rowClass = 'alert'; hasAlert = true; }
-          row.className = rowClass;
+          let cls = '';
+          if (r.alert.includes('ENTRY')) { cls = 'entry'; hasAlert = true; }
+          if (r.alert.includes('RISK') || r.alert.includes('EXIT')) { cls = 'alert'; hasAlert = true; }
+          row.className = cls;
 
           row.innerHTML = `
             <td>${r.symbol}</td>
@@ -169,18 +161,18 @@
             <td>${r.age}</td>
             <td>${r.alert || '-'}</td>
             <td>
-              <a href="${r.dsUrl}" target="_blank" class="link">Dex</a> |
+              <a href="${r.dsUrl}" target="_blank" class="link">DexScreener</a> |
               <a href="${r.pumpLink}" target="_blank" class="link">Pump.fun</a> |
-              <a href="${r.jupLink}" target="_blank" class="link">Buy (Jup)</a>
+              <a href="${r.jupLink}" target="_blank" class="link">Buy Jupiter</a>
             </td>
           `;
           TABLE.appendChild(row);
         });
 
-        UPDATE_EL.textContent = `Last update: ${new Date().toLocaleTimeString()} (Showing migrated Pump.fun tokens only for safety)`;
+        UPDATE_EL.textContent = `Last update: ${new Date().toLocaleTimeString()} – Showing top Solana Raydium pairs (many Pump.fun graduates)`;
         if (hasAlert) playAlertSound();
       } catch (err) {
-        ERROR_EL.textContent = 'Error: ' + err.message + ' (API issue? Try refresh)';
+        ERROR_EL.textContent = 'Error: ' + err.message + ' – API may be rate-limited or changed. Wait 1 min & retry.';
       }
     }
 
