@@ -1,118 +1,265 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Code Generator</title>
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #0f172a;
-        color: #fff;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
-    }
-
-    .box {
-        background: #020617;
-        padding: 25px;
-        border-radius: 10px;
-        width: 360px;
-        text-align: center;
-        box-shadow: 0 0 20px rgba(0,0,0,0.6);
-    }
-
-    h2 {
-        margin-bottom: 15px;
-    }
-
-    input {
-        width: 100%;
-        padding: 12px;
-        font-size: 16px;
-        text-align: center;
-        border-radius: 6px;
-        border: none;
-        margin-bottom: 10px;
-        background: #020617;
-        color: #22c55e;
-        border: 1px solid #334155;
-    }
-
-    button {
-        width: 100%;
-        padding: 12px;
-        font-size: 16px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        margin-top: 8px;
-        background: #22c55e;
-        color: #020617;
-        font-weight: bold;
-    }
-
-    button:hover {
-        background: #16a34a;
-    }
-
-    .copy {
-        background: #38bdf8;
-    }
-
-    .copy:hover {
-        background: #0ea5e9;
-    }
-
-    .len {
-        margin-bottom: 10px;
-        color: #cbd5f5;
-        font-size: 14px;
-    }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ultimate Meme Coin Pro Tool - Birdeye + DexScreener + Helius + Phantom</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0a0a0a; color: #ddd; margin: 20px; }
+    h1 { text-align: center; color: #00ff00; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #333; padding: 10px; text-align: center; }
+    th { background: #222; }
+    .entry { background: #004400; }
+    .exit { background: #440044; }
+    .alert { background: #440000; }
+    .bot { background: #444400; }
+    .whale { background: #004444; }
+    .link, button { color: #0ff; background: none; border: 1px solid #0ff; padding: 5px 10px; cursor: pointer; text-decoration: none; }
+    button:hover { background: #0ff; color: #000; }
+    input { padding: 8px; margin: 5px; width: 300px; }
+    #controls { text-align: center; margin: 20px; }
+    #wallet-info, #api-status { text-align: center; font-weight: bold; margin: 10px; }
+    #last-update, #error { text-align: center; font-style: italic; }
+    #error { color: #f00; }
+  </style>
 </head>
 <body>
+  <h1>Ultimate Meme Coin Dashboard (All Features Integrated)</h1>
+  <p style="text-align:center;">Top Solana memes from Birdeye. m5 data from DexScreener. Whale txns from Helius. Phantom for Jupiter buys.<br>
+  Alerts + sounds on whale/bot/scam. Auto-refreshes 30s. DYOR — high risk!</p>
 
-<div class="box">
-    <h2>Code Generator</h2>
+  <div id="controls">
+    <input id="birdeye-key" placeholder="Birdeye API Key (required)" type="text">
+    <button onclick="saveBirdeyeKey()">Save Birdeye</button>
+    <input id="helius-key" placeholder="Helius API Key (for whales)" type="text">
+    <button onclick="saveHeliusKey()">Save Helius</button>
+    <button onclick="loadData()">Refresh Now</button>
+    <button id="connect-btn" onclick="connectWallet()">Connect Phantom</button>
+    <div id="wallet-info">Wallet: Not connected</div>
+    <div id="api-status">APIs: Set keys above</div>
+  </div>
 
-    <div class="len">
-        Length:
-        <input type="number" id="length" value="26" min="6" max="64">
-    </div>
+  <div id="last-update">Loading...</div>
+  <div id="error"></div>
 
-    <input type="text" id="result" readonly>
+  <table id="table">
+    <thead>
+      <tr>
+        <th>Token</th>
+        <th>Price USD</th>
+        <th>FDV</th>
+        <th>Liquidity USD</th>
+        <th>1h Vol USD (Birdeye)</th>
+        <th>1h % Chg</th>
+        <th>1h Trades</th>
+        <th>Holders</th>
+        <th>m5 Buys/Sells</th>
+        <th>m5 Vol USD</th>
+        <th>m5 % Chg</th>
+        <th>Age (min)</th>
+        <th>Helius Whale</th>
+        <th>Alerts (Bot/Scam/Entry/Exit)</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
 
-    <button onclick="generateCode()">Generate Code</button>
-    <button class="copy" onclick="copyCode()">Copy Code</button>
-</div>
+  <script>
+    const SOL_MINT = 'So11111111111111111111111111111111111111112';
+    const BIRDEYE_BASE = 'https://public-api.birdeye.so';
+    const HELIUS_BASE = 'https://api-mainnet.helius-rpc.com/v0';
+    const DEX_BASE = 'https://api.dexscreener.com/latest/dex/tokens/';
+    let walletAddress = null;
+    let birdeyeKey = localStorage.getItem('birdeyeKey') || '';
+    let heliusKey = localStorage.getItem('heliusKey') || '';
+    document.getElementById('birdeye-key').value = birdeyeKey;
+    document.getElementById('helius-key').value = heliusKey;
+    updateApiStatus();
 
-<script>
-function generateCode() {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const length = document.getElementById("length").value;
-    let code = "";
+    const TABLE = document.getElementById('tbody');
+    const UPDATE_EL = document.getElementById('last-update');
+    const ERROR_EL = document.getElementById('error');
+    const WALLET_EL = document.getElementById('wallet-info');
 
-    for (let i = 0; i < length; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    function updateApiStatus() {
+      document.getElementById('api-status').textContent = 
+        `Birdeye: ${birdeyeKey ? 'Set' : 'Missing'} | Helius: ${heliusKey ? 'Set' : 'Missing'}`;
     }
 
-    document.getElementById("result").value = code;
-}
+    function saveBirdeyeKey() {
+      birdeyeKey = document.getElementById('birdeye-key').value.trim();
+      if (birdeyeKey) {
+        localStorage.setItem('birdeyeKey', birdeyeKey);
+        updateApiStatus();
+        alert('Birdeye key saved!');
+      }
+    }
 
-function copyCode() {
-    const input = document.getElementById("result");
-    input.select();
-    input.setSelectionRange(0, 99999);
-    navigator.clipboard.writeText(input.value);
-    alert("Code copied!");
-}
+    function saveHeliusKey() {
+      heliusKey = document.getElementById('helius-key').value.trim();
+      if (heliusKey) {
+        localStorage.setItem('heliusKey', heliusKey);
+        updateApiStatus();
+        alert('Helius key saved!');
+      }
+    }
 
-// Auto-generate on load
-generateCode();
-</script>
+    async function fetchJson(url, headers = {}) {
+      const res = await fetch(url, { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      return res.json();
+    }
 
+    async function connectWallet() {
+      if (window.solana && window.solana.isPhantom) {
+        try {
+          const resp = await window.solana.connect();
+          walletAddress = resp.publicKey.toString();
+          WALLET_EL.textContent = `Wallet: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+          alert('Phantom connected!');
+        } catch (err) {
+          alert('Connection failed: ' + err.message);
+        }
+      } else {
+        alert('Install Phantom wallet!');
+      }
+    }
+
+    function playAlertSound() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 800;
+      osc.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    }
+
+    async function loadData() {
+      try {
+        ERROR_EL.textContent = '';
+        if (!birdeyeKey) throw new Error('Birdeye API key required');
+
+        // Birdeye meme list
+        const memeRes = await fetchJson(
+          `${BIRDEYE_BASE}/defi/v3/token/meme/list?sort_by=volume_1h_usd&sort_type=desc&limit=15&offset=0`,
+          { 'accept': 'application/json', 'x-chain': 'solana', 'X-API-KEY': birdeyeKey }
+        );
+        const memeTokens = memeRes.data?.items || [];
+
+        const promises = memeTokens.map(async (token) => {
+          const mint = token.address;
+          const ageMin = token.recent_listing_time ? Math.round((Date.now() / 1000 - token.recent_listing_time) / 60) : 'N/A';
+
+          // DexScreener m5 data
+          let m5Buys = 0, m5Sells = 0, m5Vol = 0, m5Change = 0, dsUrl = `https://dexscreener.com/solana/${mint}`;
+          try {
+            const dexRes = await fetchJson(`${DEX_BASE}${mint}`);
+            const pair = dexRes.pairs?.[0] || {}; // Take main pair
+            m5Buys = pair.txns?.m5?.buys || 0;
+            m5Sells = pair.txns?.m5?.sells || 0;
+            m5Vol = pair.volume?.m5 || 0;
+            m5Change = pair.priceChange?.m5 || 0;
+            dsUrl = pair.url || dsUrl;
+          } catch (e) { /* silent fail */ }
+
+          // Helius whale
+          let heliusWhale = '-';
+          if (heliusKey) {
+            try {
+              const txns = await fetchJson(`${HELIUS_BASE}/addresses/${mint}/transactions?api-key=${heliusKey}&limit=5&sort-order=desc`);
+              for (const txn of txns) {
+                if (txn.type === 'SWAP' || txn.type === 'TRANSFER') {
+                  const large = txn.tokenTransfers?.find(t => t.mint === mint && Number(t.tokenAmount) > 100000);
+                  if (large) {
+                    heliusWhale = `Large ${txn.type}: ${large.tokenAmount} tokens`;
+                    break;
+                  }
+                }
+              }
+            } catch (e) { heliusWhale = 'Helius err'; }
+          } else { heliusWhale = 'No key'; }
+
+          // Alerts
+          let alert = '';
+          if (token.liquidity < 10000 || (token.holder < 50)) alert += 'RUG/SCAM RISK! Low liq/holders. ';
+          if (m5Sells > m5Buys * 2 || m5Change < -20) alert += 'EXIT! High sells/drop. ';
+          if (m5Buys > 30 && m5Buys > m5Sells * 1.5 && m5Vol > 20000 && m5Change > 5) alert += 'ENTRY! Whale buy surge. ';
+          if (token.trade_1h_count > 100 && token.volume_1h_usd / token.trade_1h_count < 100) alert += 'BOT LIKELY! Many small trades. ';
+
+          const jupLink = `https://jup.ag/swap/${SOL_MINT}-${mint}`;
+
+          return {
+            symbol: token.symbol || 'N/A',
+            price: token.price ? Number(token.price).toFixed(6) : 'N/A',
+            fdv: token.fdv ? token.fdv.toLocaleString() : 'N/A',
+            liq: token.liquidity ? token.liquidity.toLocaleString() : 'N/A',
+            vol1h: token.volume_1h_usd ? token.volume_1h_usd.toLocaleString() : 'N/A',
+            change1h: token.price_change_1h_percent ? token.price_change_1h_percent.toFixed(2) + '%' : 'N/A',
+            trades1h: token.trade_1h_count || 'N/A',
+            holders: token.holder || 'N/A',
+            m5BuysSells: `${m5Buys}/${m5Sells}`,
+            m5Vol: m5Vol ? m5Vol.toLocaleString() : 'N/A',
+            m5Change: m5Change ? m5Change.toFixed(2) + '%' : 'N/A',
+            age: ageMin,
+            heliusWhale,
+            alert: alert.trim(),
+            dsUrl,
+            jupLink
+          };
+        });
+
+        const results = (await Promise.all(promises)).filter(Boolean);
+        // Sort: alerts first (entry > exit > others), then volume
+        results.sort((a, b) => {
+          const aScore = a.alert.includes('ENTRY') ? 4 : a.alert.includes('EXIT') ? 2 : a.alert.includes('RISK') ? -1 : 0;
+          const bScore = b.alert.includes('ENTRY') ? 4 : b.alert.includes('EXIT') ? 2 : b.alert.includes('RISK') ? -1 : 0;
+          return bScore - aScore || b.vol1h - a.vol1h;
+        });
+
+        TABLE.innerHTML = '';
+        let hasAlert = false;
+        results.forEach(r => {
+          const row = document.createElement('tr');
+          let rowClass = '';
+          if (r.alert.includes('ENTRY')) { rowClass = 'entry'; hasAlert = true; }
+          if (r.alert.includes('EXIT')) { rowClass = 'exit'; hasAlert = true; }
+          if (r.alert.includes('RISK')) { rowClass = 'alert'; hasAlert = true; }
+          if (r.alert.includes('BOT')) { rowClass = 'bot'; }
+          if (r.heliusWhale.includes('Large')) { rowClass = 'whale'; hasAlert = true; }
+          row.className = rowClass;
+
+          row.innerHTML = `
+            <td>${r.symbol}</td>
+            <td>$${r.price}</td>
+            <td>$${r.fdv}</td>
+            <td>$${r.liq}</td>
+            <td>$${r.vol1h}</td>
+            <td>${r.change1h}</td>
+            <td>${r.trades1h}</td>
+            <td>${r.holders}</td>
+            <td>${r.m5BuysSells}</td>
+            <td>$${r.m5Vol}</td>
+            <td>${r.m5Change}</td>
+            <td>${r.age}</td>
+            <td>${r.heliusWhale}</td>
+            <td>${r.alert || '-'}</td>
+            <td><a href="${r.dsUrl}" target="_blank" class="link">Dex</a> | <a href="${r.jupLink}" target="_blank" class="link">Buy (Jup)</a></td>
+          `;
+          TABLE.appendChild(row);
+        });
+
+        UPDATE_EL.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+        if (hasAlert) playAlertSound();
+      } catch (err) {
+        ERROR_EL.textContent = 'Error: ' + err.message + ' (Check keys/rates)';
+      }
+    }
+
+    loadData();
+    setInterval(loadData, 30000);
+  </script>
 </body>
 </html>
